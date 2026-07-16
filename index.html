@@ -58,7 +58,6 @@
         .upload-btn { background: #f39c12; color: #111; font-weight: bold; padding: 14px 28px; border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase; }
         .upload-area input { display: none; }
         
-        /* Hidden layout canvas blocks utilized by OpenCV processing */
         #hiddenCanvasImg { display: none; }
         #masterTemplateImg { display: none; }
     </style>
@@ -118,12 +117,11 @@
     </div>
 
     <script>
-        // --- CONFIGURATION LINKS FOR YOUR MASTER REFERENCE IMAGES ---
-        // REPLACE THESE STRINGS WITH THE ABSOLUTE PATHS TO YOUR TARGET IMAGES
+        // --- CONFIGURATION LINKS FOR YOUR UPLOADED MASTER REFERENCE IMAGES ---
         const MASTER_IMAGES = {
-            "180": "https://raw.githubusercontent.com/yourusername/yourrepo/main/master_180.png",
-            "375": "https://raw.githubusercontent.com/yourusername/yourrepo/main/master_375.png",
-            "750": "https://raw.githubusercontent.com/yourusername/yourrepo/main/master_750.png"
+            "180": "https://raw.githubusercontent.com/manasghosh9471-ui/Label-Aurthorization/main/master_180.png",
+            "375": "https://raw.githubusercontent.com/manasghosh9471-ui/Label-Aurthorization/main/master_375.png",
+            "750": "https://raw.githubusercontent.com/manasghosh9471-ui/Label-Aurthorization/main/master_750.png"
         };
 
         function onOpenCvReady() {
@@ -131,7 +129,7 @@
             document.getElementById('statusDesc').innerText = "OpenCV loaded. Select batch size and scan.";
             const btn = document.getElementById('uploadLabelBtn');
             btn.style.opacity = "1";
-            btn.style.pointer-events = "auto";
+            btn.style.pointerEvents = "auto";
             updateMasterTemplateLink();
         }
 
@@ -140,7 +138,7 @@
             document.getElementById('masterTemplateImg').src = MASTER_IMAGES[size];
         }
 
-        // --- BACKGROUND GRAPHICS ---
+        // --- BACKGROUND PHOTOGRAPHY ROTATION ENGINE ---
         const images = [
             "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80",
             "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=800&q=80"
@@ -180,42 +178,39 @@
         function processVisualSimilarity(capturedImgElement) {
             displayPanel.className = "display-panel state-processing";
             statusTitle.innerText = "COMPARING IMAGES...";
-            statusDesc.innerText = "Analyzing graphic elements and pixel arrays against the master blueprint...";
+            statusDesc.innerText = "Analyzing layout structure and graphic elements against the blueprint image...";
 
             try {
-                // Read captured photo canvas into OpenCV Matrix structure
                 let src = cv.imread(capturedImgElement);
                 let templ = cv.imread(document.getElementById('masterTemplateImg'));
                 let dst = new cv.Mat();
                 let mask = new cv.Mat();
 
-                // Run structural TM_CCOEFF_NORMED matching matrix algorithm
+                // Compute geometric matching array matrices
                 cv.matchTemplate(src, templ, dst, cv.TM_CCOEFF_NORMED, mask);
                 let result = cv.minMaxLoc(dst, mask);
                 
-                // The maxVal variable yields a structural similarity percentage score between 0.0 and 1.0
                 let matchScore = result.maxVal * 100;
                 
-                // Clean up memory instances inside the browser pipeline
                 src.delete(); templ.delete(); dst.delete(); mask.delete();
 
                 displayPanel.className = "display-panel";
 
-                // Threshold set to 65% matrix alignment to accommodate typical warehouse floor shadows
+                // Threshold level optimized to filter mismatched label configurations comfortably
                 if (matchScore >= 65) {
                     displayPanel.classList.add('state-pass');
                     statusTitle.innerText = "✓ VERIFIED PASS";
-                    statusDesc.innerText = `Visual Layout Match Confirmed (${matchScore.toFixed(1)}% structural match). Label is correct.`;
+                    statusDesc.innerText = `Visual Layout Match Confirmed (${matchScore.toFixed(1)}% match). Label verified successfully.`;
                 } else {
                     displayPanel.classList.add('state-fail');
                     statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
-                    statusDesc.innerText = `Layout does not align with the master template (${matchScore.toFixed(1)}% match). Check packaging size!`;
+                    statusDesc.innerText = `Layout does not match the master template image layout (${matchScore.toFixed(1)}% match). Verify SKU size!`;
                 }
             } catch (err) {
                 console.error(err);
                 displayPanel.className = "display-panel state-fail";
                 statusTitle.innerText = "PROCESSING ERROR";
-                statusDesc.innerText = "Make sure your master template image URL is valid and uploaded correctly to your server.";
+                statusDesc.innerText = "Failed to run layout comparison. Ensure target size images are active.";
             }
         }
     </script>
