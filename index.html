@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS Smart Verification Portal</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background-color: #121212; color: #fff; min-height: 100vh; overflow-x: hidden; }
+
+        /* --- STYLING: LOGIN VIEW --- */
+        #loginView {
+            display: flex; justify-content: center; align-items: center; height: 100vh;
+            background-size: cover; background-position: center; position: relative; transition: background 1.5s ease-in-out;
+        }
+        #loginView::before {
+            content: ''; position: absolute; top:0; left:0; right:0; bottom:0;
+            background: linear-gradient(135deg, rgba(20,20,20,0.85) 0%, rgba(40,40,40,0.6) 100%); z-index: 1;
+        }
+        .login-container {
+            position: relative; z-index: 2; background: rgba(30, 30, 30, 0.85); border: 1px solid #444;
+            border-top: 4px solid #f39c12; padding: 40px; border-radius: 8px; width: 90%; max-width: 400px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5); backdrop-filter: blur(10px);
+        }
+        .wms-header { text-align: center; margin-bottom: 30px; }
+        .wms-header h1 { color: #fff; font-size: 22px; letter-spacing: 1px; }
+        .wms-header p { color: #f39c12; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
+        .input-group { margin-bottom: 20px; }
+        .input-group label { display: block; color: #aaa; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; }
+        .input-group input {
+            width: 100%; padding: 12px; background: #2b2b2b; border: 1px solid #444;
+            color: #fff; border-radius: 4px; font-size: 15px;
+        }
+        .input-group input:focus { border-color: #f39c12; outline: none; }
+        .login-btn {
+            width: 100%; padding: 14px; background: #f39c12; border: none; color: #111;
+            font-weight: bold; font-size: 16px; border-radius: 4px; cursor: pointer; text-transform: uppercase;
+        }
+
+        /* --- STYLING: SCANNER VIEW --- */
+        #scannerView { display: none; padding: 20px; flex-direction: column; min-height: 100vh; }
+        header { border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px; }
+        header h1 { font-size: 20px; color: #f39c12; }
+        .config-card { background: #1e1e1e; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #333; }
+        .config-card h3 { color: #aaa; font-size: 11px; text-transform: uppercase; margin-bottom: 8px; }
+        .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+        .meta-val { color: #fff; font-weight: bold; }
+        
+        .display-panel {
+            flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: #1a1a1a; border-radius: 8px; border: 2px dashed #444; padding: 30px; text-align: center;
+            margin-bottom: 20px; min-height: 250px; transition: all 0.2s;
+        }
+        .status-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+        .status-desc { font-size: 15px; color: #ccc; max-width: 400px; line-height: 1.4; }
+        
+        .state-pass { background: #1b5e20 !important; border-color: #4caf50 !important; }
+        .state-fail { background: #b71c1c !important; border-color: #f44336 !important; }
+        .state-processing { background: #2980b9 !important; border-color: #3498db !important; }
+
+        .upload-area { background: #1e1e1e; padding: 20px; border-radius: 6px; text-align: center; border: 1px solid #333; }
+        .upload-btn {
+            background: #f39c12; color: #111; font-weight: bold; padding: 14px 28px;
+            border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase;
+        }
+        .upload-area input { display: none; }
+        .debug-box { background: #000; color: #0f0; font-family: monospace; padding: 12px; border-radius: 4px; font-size: 11px; margin-top: 15px; text-align: left; max-height: 120px; overflow-y: auto; display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="loginView">
+        <div class="login-container">
+            <div class="wms-header">
+                <h1>SUPPLY CHAIN PORTFORM</h1>
+                <p>Label Verification App</p>
+            </div>
+            <div class="input-group">
+                <label>Operator Assignment ID</label>
+                <input type="text" id="opId" placeholder="Enter Operator ID">
+            </div>
+            <div class="input-group">
+                <label>Access Password</label>
+                <input type="password" id="opPass" placeholder="••••••••">
+            </div>
+            <button class="login-btn" onclick="handleLogin()">Secure Login</button>
+        </div>
+    </div>
+
+    <div id="scannerView">
+        <header>
+            <h1>ALCO-BEV TOTAL LABEL VERIFIER</h1>
+        </header>
+
+        <div class="config-card">
+            <h3>Active Target manifest Requirements</h3>
+            <div class="meta-grid">
+                <div>Target Rate Area: <span class="meta-val">MEGHALAYA</span></div>
+                <div>Required Pack Size: <span class="meta-val">375 ML</span></div>
+            </div>
+        </div>
+
+        <div class="display-panel" id="displayPanel">
+            <div class="status-title" id="statusTitle">AWAITING CAPTURE</div>
+            <div class="status-desc" id="statusDesc">Snap a crisp photo of the total label text to parse compliance constraints...</div>
+        </div>
+
+        <div class="upload-area">
+            <label class="upload-btn">
+                📷 Capture Label Image
+                <input type="file" id="labelImageInput" accept="image/*" capture="environment">
+            </label>
+        </div>
+
+        <div class="debug-box" id="debugBox"></div>
+    </div>
+
+    <script>
+        // --- LOGIN BACKGROUND ROTATION LOGIC ---
+        const images = [
+            "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=800&q=80"
+        ];
+        let bgIndex = 0;
+        function rotateBg() {
+            const lv = document.getElementById('loginView');
+            if(lv) lv.style.backgroundImage = `url('${images[bgIndex]}')`;
+            bgIndex = (bgIndex + 1) % images.length;
+        }
+        rotateBg();
+        setInterval(rotateBg, 5000);
+
+        // --- SCREEN ROUTING SWITCH ---
+        function handleLogin() {
+            document.getElementById('loginView').style.display = 'none';
+            document.getElementById('scannerView').style.display = 'flex';
+        }
+
+        // --- SCANNING & OCR MATCH ENGINE ---
+        const activeManifest = { rateArea: "MEGHALAYA", size: "375" };
+        const imageInput = document.getElementById('labelImageInput');
+        const displayPanel = document.getElementById('displayPanel');
+        const statusTitle = document.getElementById('statusTitle');
+        const statusDesc = document.getElementById('statusDesc');
+        const debugBox = document.getElementById('debugBox');
+
+        imageInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                processLabelOCR(this.files[0]);
+            }
+        });
+
+        async function processLabelOCR(imageFile) {
+            displayPanel.className = "display-panel state-processing";
+            statusTitle.innerText = "READING TEXT...";
+            statusDesc.innerText = "Running digital scan sweep directly inside browser matrix...";
+            debugBox.style.display = "none";
+
+            try {
+                const result = await Tesseract.recognize(imageFile, 'eng');
+                const extractedText = result.data.text.toUpperCase();
+                
+                debugBox.style.display = "block";
+                debugBox.innerText = `--- RAW EXTRACTED TEXT ---\n${result.data.text}`;
+
+                const containsArea = extractedText.includes(activeManifest.rateArea);
+                const containsSize = extractedText.includes(activeManifest.size);
+
+                displayPanel.className = "display-panel";
+
+                if (containsArea && containsSize) {
+                    displayPanel.classList.add('state-pass');
+                    statusTitle.innerText = "✓ VERIFIED PASS";
+                    statusDesc.innerText = `Label explicitly matches "${activeManifest.rateArea}" text regulations and confirms "${activeManifest.size} ml" footprint.`;
+                } else {
+                    displayPanel.classList.add('state-fail');
+                    statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
+                    let errors = [];
+                    if (!containsArea) errors.push(`Rate Area Error (Missed "${activeManifest.rateArea}")`);
+                    if (!containsSize) errors.push(`Size Mismatch (Missed "${activeManifest.size} ML")`);
+                    statusDesc.innerText = errors.join(" | ");
+                }
+            } catch (error) {
+                displayPanel.className = "display-panel state-fail";
+                statusTitle.innerText = "SCAN FAILURE";
+                statusDesc.innerText = "Could not parse clear text. Hold device steady under bright warehouse lighting.";
+            }
+        }
+    </script>
+</body>
+</html>
