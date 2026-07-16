@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WMS Localized Verifier</title>
+    <title>WMS Live Stream Verification Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-        body { background-color: #121212; color: #fff; min-height: 100vh; }
+        body { background-color: #121212; color: #fff; min-height: 100vh; display: flex; flex-direction: column; }
 
         /* --- STYLING: LOGIN VIEW --- */
         #loginView {
@@ -33,35 +33,44 @@
         .login-btn { width: 100%; padding: 14px; background: #f39c12; border: none; color: #111; font-weight: bold; font-size: 16px; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
 
         /* --- STYLING: SCANNER VIEW --- */
-        #scannerView { display: none; padding: 20px; flex-direction: column; min-height: 100vh; }
-        header { border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px; }
-        header h1 { font-size: 20px; color: #f39c12; }
+        #scannerView { display: none; padding: 15px; flex-direction: column; flex: 1; }
+        header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px; }
+        header h1 { font-size: 18px; color: #f39c12; }
         
-        .config-card { background: #1e1e1e; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #333; }
-        .config-card h3 { color: #aaa; font-size: 11px; text-transform: uppercase; margin-bottom: 10px; }
-        .select-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .select-group label { display: block; color: #888; font-size: 12px; margin-bottom: 5px; }
-        .select-group select { width: 100%; padding: 10px; background: #2b2b2b; border: 1px solid #444; color: #fff; border-radius: 4px; font-weight: bold; }
+        .config-card { background: #1e1e1e; padding: 12px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #333; }
+        .select-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .select-group label { display: block; color: #888; font-size: 11px; margin-bottom: 4px; text-transform: uppercase; }
+        .select-group select { width: 100%; padding: 8px; background: #2b2b2b; border: 1px solid #444; color: #fff; border-radius: 4px; font-weight: bold; }
 
-        .display-panel {
-            flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: #1a1a1a; border-radius: 8px; border: 2px dashed #444; padding: 30px; text-align: center;
-            margin-bottom: 20px; min-height: 250px; transition: all 0.2s;
+        /* Live Camera Feed Container Wrapper */
+        .video-wrapper {
+            position: relative; width: 100%; max-width: 500px; margin: 0 auto 15px auto;
+            border-radius: 8px; overflow: hidden; border: 2px solid #444; background: #000;
+            aspect-ratio: 4/3;
         }
-        .status-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
-        .status-desc { font-size: 15px; color: #ccc; max-width: 400px; line-height: 1.4; }
-        
-        .state-pass { background: #1b5e20 !important; border-color: #4caf50 !important; }
-        .state-fail { background: #b71c1c !important; border-color: #f44336 !important; }
-        .state-processing { background: #2980b9 !important; border-color: #3498db !important; }
+        #videoStream { width: 100%; height: 100%; object-fit: cover; }
 
-        .upload-area { background: #1e1e1e; padding: 20px; border-radius: 6px; text-align: center; border: 1px solid #333; margin-bottom: 15px;}
-        .upload-btn { background: #f39c12; color: #111; font-weight: bold; padding: 14px 28px; border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase; }
-        .upload-area input { display: none; }
+        /* Dynamic Real-Time Overlay Shield */
+        .live-overlay-shield {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            text-align: center; padding: 20px; pointer-events: none; transition: background 0.2s ease;
+            background: rgba(0,0,0,0.2);
+        }
         
-        #processingCanvas { display: none; }
-        #hiddenPreview { display: none; max-width: 100%; height: auto; margin-top: 10px; border-radius: 4px; }
-        .debug-box { background: #000; color: #0f0; font-family: monospace; padding: 12px; border-radius: 4px; font-size: 11px; text-align: left; max-height: 150px; overflow-y: auto; display: none; margin-top: 10px; }
+        .status-title { font-size: 26px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+        .status-desc { font-size: 14px; margin-top: 5px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); color: #ddd; }
+
+        /* Visual Feedback States for the Camera Shield */
+        .shield-pass { background: rgba(27, 94, 32, 0.75) !important; }
+        .shield-fail { background: rgba(183, 28, 28, 0.75) !important; }
+        .shield-processing { background: rgba(41, 128, 185, 0.6) !important; }
+
+        .control-panel { text-align: center; margin-bottom: 10px; }
+        .action-btn { background: #f39c12; color: #111; font-weight: bold; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; font-size: 14px; }
+        
+        #hiddenCaptureCanvas { display: none; }
+        .debug-box { background: #000; color: #0f0; font-family: monospace; padding: 10px; border-radius: 4px; font-size: 11px; max-height: 100px; overflow-y: auto; display: none; }
     </style>
 </head>
 <body>
@@ -70,7 +79,7 @@
         <div class="login-container">
             <div class="wms-header">
                 <h1>SUPPLY CHAIN PLATFORM</h1>
-                <p>Localized Verifier</p>
+                <p>Live Video Stream Verifier</p>
             </div>
             <div class="input-group"><label>Operator ID</label><input type="text" placeholder="Enter ID"></div>
             <div class="input-group"><label>Password</label><input type="password" placeholder="••••••••"></div>
@@ -80,11 +89,10 @@
 
     <div id="scannerView">
         <header>
-            <h1>LOCALIZED HYBRID VERIFIER</h1>
+            <h1>LIVE LABEL VERIFICATION MATRIX</h1>
         </header>
 
         <div class="config-card">
-            <h3>Set Target Manifest Configuration</h3>
             <div class="select-grid">
                 <div class="select-group">
                     <label>Target Rate Area</label>
@@ -105,32 +113,31 @@
             </div>
         </div>
 
-        <div class="display-panel" id="displayPanel">
-            <div class="status-title" id="statusTitle">READY TO VERIFY</div>
-            <div class="status-desc" id="statusDesc">Snap a clear photograph of the label to run compliance sweeps...</div>
+        <div class="video-wrapper">
+            <video id="videoStream" autoplay playsinline muted></video>
+            <div class="live-overlay-shield" id="overlayShield">
+                <div class="status-title" id="statusTitle">STREAMING LIVE</div>
+                <div class="status-desc" id="statusDesc">Align the product label within the camera frame view...</div>
+            </div>
         </div>
 
-        <div class="upload-area">
-            <label class="upload-btn">
-                📷 Capture Label Image
-                <input type="file" id="labelImageInput" accept="image/*" capture="environment">
-            </label>
-            <img id="hiddenPreview" alt="Scan preview">
-            <canvas id="processingCanvas"></canvas>
+        <div class="control-panel">
+            <button class="action-btn" id="startEngineBtn" onclick="initiateLiveScanner()">Start Live Capture</button>
         </div>
 
         <div class="debug-box" id="debugBox"></div>
+        <canvas id="hiddenCaptureCanvas"></canvas>
     </div>
 
     <script>
-        // --- MASTER SKU DICTIONARY ---
+        // --- DATA LOOKUP ARRAYS ---
         const BARCODE_MASTER_DATA = {
-            "8901522001099": { size: "375", area: "MEGHALAYA", name: "Royal Stag 375ml" },
-            "8901522002096": { size: "180", area: "MEGHALAYA", name: "Royal Stag 180ml" },
-            "8901522000092": { size: "750", area: "MEGHALAYA", name: "Royal Stag 750ml" }
+            "8901522001099": { size: "375", area: "MEGHALAYA" },
+            "8901522002096": { size: "180", area: "MEGHALAYA" },
+            "8901522000092": { size: "750", area: "MEGHALAYA" }
         };
 
-        // --- LOGIN GRAPHICS CYCLING ---
+        // --- LOGIN GRAPHICS BACKGROUND ROTATION ---
         const images = [
             "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80",
             "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=800&q=80"
@@ -148,118 +155,92 @@
             document.getElementById('scannerView').style.display = 'flex';
         }
 
-        const imageInput = document.getElementById('labelImageInput');
-        const displayPanel = document.getElementById('displayPanel');
+        // --- LIVE VIDEO ENGINE CORE EXECUTION LOOP ---
+        let codeReader = null;
+        let isProcessingFrame = false;
+        let scanTimer = null;
+
+        const video = document.getElementById('videoStream');
+        const shield = document.getElementById('overlayShield');
         const statusTitle = document.getElementById('statusTitle');
         const statusDesc = document.getElementById('statusDesc');
         const debugBox = document.getElementById('debugBox');
-        const hiddenPreview = document.getElementById('hiddenPreview');
-        const procCanvas = document.getElementById('processingCanvas');
+        const canvas = document.getElementById('hiddenCaptureCanvas');
 
-        imageInput.addEventListener('change', function() {
-            if (this.files && this.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    hiddenPreview.src = e.target.result;
-                    hiddenPreview.style.display = "block";
-                    hiddenPreview.onload = function() {
-                        runLocalizedAnalysis();
-                    }
-                }
-                reader.readAsDataURL(this.files[0]);
+        async function initiateLiveScanner() {
+            document.getElementById('startEngineBtn').style.display = 'none';
+            codeReader = new ZXing.BrowserMultiFormatReader();
+            
+            try {
+                // Request back-facing camera stream explicitly
+                const constraints = { video: { facingMode: { exact: "environment" } } };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints).catch(() => {
+                    // Fallback to default user camera access if strict environment back-camera parameter is rejected
+                    return navigator.mediaDevices.getUserMedia({ video: true });
+                });
+                
+                video.srcObject = stream;
+                debugBox.style.display = "block";
+                debugBox.innerText += "[SYSTEM]: Live hardware camera hooked successfully.\n";
+                
+                // Fire processing cycles every 2 seconds automatically from the live stream
+                scanTimer = setInterval(captureAndProcessFrame, 2000);
+            } catch (err) {
+                statusTitle.innerText = "CAMERA ACCESS DENIED";
+                statusDesc.innerText = "Please provide camera permissions in your mobile browser settings.";
+                console.error(err);
             }
-        });
+        }
 
-        async function runLocalizedAnalysis() {
-            displayPanel.className = "display-panel state-processing";
-            statusTitle.innerText = "PROCESSING...";
-            statusDesc.innerText = "Analyzing barcode structures and text orientations...";
-            debugBox.style.display = "none";
-            debugBox.innerText = "";
+        async function captureAndProcessFrame() {
+            if (isProcessingFrame) return; // Prevent loop collisions if engine execution takes longer than expected
+            isProcessingFrame = true;
+
+            shield.className = "live-overlay-shield shield-processing";
+            statusTitle.innerText = "ANALYZING LIVE...";
 
             const targetArea = document.getElementById('manifestArea').value;
             const targetSize = document.getElementById('manifestSize').value;
 
-            let barcodeMatchValue = null;
-            let combinedTextData = "";
+            let barcodeDetected = null;
+            let textDetected = "";
 
-            // --- STEP 1: DECODE PHYSICAL BARCODE ---
+            // --- ENGINE PART A: DECODE STREAM BARCODES ---
             try {
-                const codeReader = new ZXing.BrowserBarcodeReader();
-                const barcodeResult = await codeReader.decodeFromImageElement(hiddenPreview);
-                barcodeMatchValue = barcodeResult.text.trim();
-                debugBox.innerText += `[BARCODE]: Successfully read barcode -> ${barcodeMatchValue}\n`;
-            } catch (err) {
-                debugBox.innerText += `[BARCODE]: Stripe decoding missed. Checking text fields...\n`;
+                const barcodeResult = await codeReader.decodeFromVideoElement(video);
+                barcodeDetected = barcodeResult.text.trim();
+                debugBox.innerText = `[LIVE STREAM]: Read Barcode Stripe -> ${barcodeDetected}\n`;
+            } catch (e) {
+                // ZXing throws silent exceptions constantly while looking for valid barcode shapes frame-by-frame
             }
 
-            // --- STEP 2: PREPROCESS ROTATED TEXT ---
-            // Draw rotated versions to hidden canvas frames to decode vertical print orientations (90-degree offsets)
-            const ctx = procCanvas.getContext('2d');
-            const orientations = [0, 90, 270];
-
-            for (let angle of orientations) {
-                try {
-                    if (angle === 0) {
-                        const ocrRes = await Tesseract.recognize(hiddenPreview.src, 'eng');
-                        combinedTextData += " " + ocrRes.data.text.toUpperCase();
-                    } else {
-                        // Rotate image 90 or 270 degrees to convert vertical text to horizontal
-                        procCanvas.width = (angle === 90 || angle === 270) ? hiddenPreview.naturalHeight : hiddenPreview.naturalWidth;
-                        procCanvas.height = (angle === 90 || angle === 270) ? hiddenPreview.naturalWidth : hiddenPreview.naturalHeight;
-                        
-                        ctx.clearRect(0,0, procCanvas.width, procCanvas.height);
-                        ctx.translate(procCanvas.width/2, procCanvas.height/2);
-                        ctx.rotate(angle * Math.PI / 180);
-                        ctx.drawImage(hiddenPreview, -hiddenPreview.naturalWidth/2, -hiddenPreview.naturalHeight/2);
-                        
-                        const rotatedDataUrl = procCanvas.toDataURL('image/jpeg');
-                        const ocrRes = await Tesseract.recognize(rotatedDataUrl, 'eng');
-                        combinedTextData += " " + ocrRes.data.text.toUpperCase();
-                    }
-                } catch (ocrErr) {
-                    console.log(`OCR rotation skip for angle: ${angle}`);
-                }
-            }
-
-            debugBox.innerText += `\n[PARSED LABELS LOGS]:\n${combinedTextData}`;
-            debugBox.style.display = "block";
-            displayPanel.className = "display-panel";
-
-            // --- STEP 3: DUAL-CHECK LOGIC ---
-            let passBarcode = false;
-            let passText = false;
-
-            // Match decoded barcode structure to registry
-            if (barcodeMatchValue && BARCODE_MASTER_DATA[barcodeMatchValue]) {
-                const product = BARCODE_MASTER_DATA[barcodeMatchValue];
-                if (product.size === targetSize && product.area === targetArea) {
-                    passBarcode = true;
-                }
-            }
-
-            // Match text patterns across the rotated frames
-            const containsAreaText = combinedTextData.includes(targetArea);
-            const containsSizeText = combinedTextData.includes(targetSize);
-            if (containsAreaText && containsSizeText) {
-                passText = true;
-            }
-
-            // PASS RESOLUTION
-            if (passBarcode || passText) {
-                displayPanel.classList.add('state-pass');
-                statusTitle.innerText = "✓ VERIFIED PASS";
-                statusDesc.innerText = `Matched Target Configurations: ${targetArea} | ${targetSize} ml successfully confirmed.`;
-            } else {
-                displayPanel.classList.add('state-fail');
-                statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
+            // --- ENGINE PART B: DECODE TEXT MATRIX VIA CANVAS INTERCEPT ---
+            try {
+                const ctx = canvas.getContext('2d');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
-                let reasons = [];
-                if (!containsAreaText && !passBarcode) reasons.push(`Missing Area String "${targetArea}"`);
-                if (!containsSizeText && !passBarcode) reasons.push(`Missing Size String "${targetSize}"`);
-                statusDesc.innerText = reasons.length > 0 ? reasons.join(" | ") : "Label does not match expected batch parameters.";
+                const frameDataUrl = canvas.toDataURL('image/jpeg', 0.6); // Compress slightly for faster execution
+                const ocrResult = await Tesseract.recognize(frameDataUrl, 'eng');
+                textDetected = ocrResult.data.text.toUpperCase();
+            } catch (ocrErr) {
+                console.log("OCR frame intercept pass dropped.");
             }
-        }
-    </script>
-</body>
-</html>
+
+            // --- CROSS-REFERENCE VALIDATION ENGINE ---
+            let barcodeValid = false;
+            if (barcodeDetected && BARCODE_MASTER_DATA[barcodeDetected]) {
+                const product = BARCODE_MASTER_DATA[barcodeDetected];
+                if (product.size === targetSize && product.area === targetArea) {
+                    barcodeValid = true;
+                }
+            }
+
+            const textValid = textDetected.includes(targetArea) && textDetected.includes(targetSize);
+
+            // LIVE FEEDBACK RENDERING RESOLUTION
+            shield.className = "live-overlay-shield"; // Clear temporary parsing layout colors
+            
+            if (barcodeValid || textValid) {
+                shield.classList.add('shield
