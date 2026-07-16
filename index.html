@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WMS High-Speed Scanner</title>
-    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <title>WMS Enterprise Verification Gateway</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background-color: #121212; color: #fff; min-height: 100vh; display: flex; flex-direction: column; }
@@ -18,34 +17,34 @@
         .select-group label { display: block; color: #888; font-size: 11px; margin-bottom: 4px; text-transform: uppercase; }
         .select-group select { width: 100%; padding: 8px; background: #2b2b2b; border: 1px solid #444; color: #fff; border-radius: 4px; font-weight: bold; }
 
-        /* Scanning Visual Feedback Viewport */
+        /* Gate Display Panels */
         .display-panel {
             flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
             background: #1a1a1a; border-radius: 8px; border: 2px dashed #444; padding: 30px; text-align: center;
             margin-bottom: 20px; min-height: 250px; transition: all 0.2s;
         }
-        .status-title { font-size: 28px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .status-title { font-size: 32px; font-weight: bold; }
         .status-desc { font-size: 15px; color: #ccc; max-width: 400px; line-height: 1.4; margin-top: 5px; }
         
-        /* High-Visibility Industrial Response States */
+        /* High-Visibility Industrial Output Overrides */
         .state-pass { background: #1b5e20 !important; border-color: #4caf50 !important; }
         .state-fail { background: #b71c1c !important; border-color: #f44336 !important; }
-        .state-processing { background: #2980b9 !important; border-color: #3498db !important; }
 
-        .upload-area { background: #1e1e1e; padding: 20px; border-radius: 6px; text-align: center; border: 1px solid #333; margin-bottom: 15px;}
-        .upload-btn { background: #f39c12; color: #111; font-weight: bold; padding: 16px 32px; border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase; width: 100%; max-width: 320px; }
-        .upload-area input { display: none; }
+        .input-area { background: #1e1e1e; padding: 15px; border-radius: 6px; border: 1px solid #333; }
+        .input-area input {
+            width: 100%; padding: 14px; background: #2b2b2b; border: 1px solid #444;
+            color: #fff; border-radius: 4px; font-size: 16px; text-align: center; font-weight: bold;
+        }
+        .input-area input:focus { border-color: #f39c12; outline: none; }
         
-        #hiddenCaptureImg { display: none; max-width: 100%; max-height: 150px; margin-top: 15px; border-radius: 4px; border: 1px solid #444; }
-        .result-log { background: #000; color: #aaa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 13px; text-align: center; margin-top: 5px; }
-        .result-log span { color: #f39c12; font-weight: bold; }
+        .hint-text { font-size: 11px; color: #666; text-align: center; margin-top: 8px; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
     <div id="scannerView">
         <header>
-            <h1>HIGH-SPEED DYNAMIC SCANNER</h1>
+            <h1>ENTERPRISE WMS GATEWAY</h1>
         </header>
 
         <div class="config-card">
@@ -70,99 +69,71 @@
         </div>
 
         <div class="display-panel" id="displayPanel">
-            <div class="status-title" id="statusTitle">READY TO VERIFY</div>
-            <div class="status-desc" id="statusDesc">Tap the button below to point the camera directly at the barcode stripes.</div>
+            <div class="status-title" id="statusTitle">AWAITING SCANNER SCAN</div>
+            <div class="status-desc" id="statusDesc">Ready for laser input entries. Scan the label's barcode or type the EAN numbers manually below.</div>
         </div>
 
-        <div class="upload-area">
-            <label class="upload-btn">
-                📷 Open Camera & Scan Live
-                <input type="file" id="labelImageInput" accept="image/*" capture="environment">
-            </label>
-            <img id="hiddenCaptureImg" alt="Last capture overview">
+        <div class="input-area">
+            <input type="text" id="barcodeStreamInput" placeholder="[ READY FOR ENTERPRISE INPUT ]" autofocus autocomplete="off">
+            <div class="hint-text">System dynamically catches inputs automatically. Keep focused.</div>
         </div>
-
-        <div class="result-log" id="barcodeTrackerLog">Last Decoded Barcode: <span>None</span></div>
     </div>
 
     <script>
-        // --- MASTER SYSTEM DATA REGISTRY MATRIX ---
+        // --- MASTER SYSTEM COMPLIANCE REGISTRY ---
         const BARCODE_MASTER_DATA = {
-            "8901522001099": { size: "375", area: "MEGHALAYA", label: "Royal Stag 375ml" },
-            "8901522002096": { size: "180", area: "MEGHALAYA", label: "Royal Stag 180ml" },
-            "8901522000092": { size: "750", area: "MEGHALAYA", label: "Royal Stag 750ml" }
+            "8901522001099": { size: "375", area: "MEGHALAYA", name: "Royal Stag 375ml" },
+            "8901522002096": { size: "180", area: "MEGHALAYA", name: "Royal Stag 180ml" },
+            "8901522000092": { size: "750", area: "MEGHALAYA", name: "Royal Stag 750ml" }
         };
 
-        const imageInput = document.getElementById('labelImageInput');
+        const streamInput = document.getElementById('barcodeStreamInput');
         const displayPanel = document.getElementById('displayPanel');
         const statusTitle = document.getElementById('statusTitle');
         const statusDesc = document.getElementById('statusDesc');
-        const barcodeTrackerLog = document.getElementById('barcodeTrackerLog');
-        const hiddenCaptureImg = document.getElementById('hiddenCaptureImg');
 
-        imageInput.addEventListener('change', function() {
-            if (this.files && this.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    hiddenCaptureImg.src = e.target.result;
-                    hiddenCaptureImg.style.display = "inline-block";
-                    
-                    hiddenCaptureImg.onload = function() {
-                        executeHighSpeedDecode();
-                    };
-                }
-                reader.readAsDataURL(this.files[0]);
+        // Force browser cursor window focus loop continuously so input is never missed
+        document.addEventListener('click', () => streamInput.focus());
+        window.addEventListener('load', () => streamInput.focus());
+
+        // Dynamic key listener captures fast scanner streams instantly
+        streamInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                processHardwareInput(this.value.trim());
+                this.value = ''; // Instantly wipe entry buffer for next sequential bottle run
             }
         });
 
-        async function executeHighSpeedDecode() {
-            displayPanel.className = "display-panel state-processing";
-            statusTitle.innerText = "DECODING STRIPES...";
-            statusDesc.innerText = "Processing high-speed geometric barcode calculations...";
+        function processHardwareInput(barcode) {
+            if (!barcode) return;
 
             const targetArea = document.getElementById('manifestArea').value;
             const targetSize = document.getElementById('manifestSize').value;
+            const product = BARCODE_MASTER_DATA[barcode];
 
-            try {
-                // Initialize the optimized browser barcode matrix reader
-                const codeReader = new ZXing.BrowserMultiFormatReader();
-                const decodeResult = await codeReader.decodeFromImageElement(hiddenCaptureImg);
-                const barcode = decodeResult.text.trim();
+            displayPanel.className = "display-panel"; // Flush standard states
 
-                barcodeTrackerLog.innerHTML = `Last Decoded Barcode: <span>${barcode}</span>`;
-                displayPanel.className = "display-panel"; // Reset processing state
+            if (product) {
+                const isAreaValid = product.area === targetArea;
+                const isSizeValid = product.size === targetSize;
 
-                const product = BARCODE_MASTER_DATA[barcode];
-
-                if (product) {
-                    const matchesArea = product.area === targetArea;
-                    const matchesSize = product.size === targetSize;
-
-                    if (matchesArea && matchesSize) {
-                        displayPanel.classList.add('state-pass');
-                        statusTitle.innerText = "✓ GENUINE PASS";
-                        statusDesc.innerText = `${product.label} authorized for destination target [${product.area}].`;
-                    } else {
-                        displayPanel.classList.add('state-fail');
-                        statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
-                        
-                        let errors = [];
-                        if (!matchesArea) errors.push(`Wrong Rate Area (${product.area})`);
-                        if (!matchesSize) errors.push(`Mismatched Container Volume (${product.size}ml)`);
-                        statusDesc.innerText = errors.join(" | ");
-                    }
+                if (isAreaValid && isSizeValid) {
+                    displayPanel.classList.add('state-pass');
+                    statusTitle.innerText = "✓ AUTHENTIC PASS";
+                    statusDesc.innerText = `${product.name} verified correctly for distribution zone [${product.area}].`;
                 } else {
                     displayPanel.classList.add('state-fail');
-                    statusTitle.innerText = "⚠ UNREGISTERED SKU";
-                    statusDesc.innerText = `Barcode code [${barcode}] is missing from active database registries.`;
+                    statusTitle.innerText = "⚠ COMPLIANCE FAILURE";
+                    
+                    let discrepancies = [];
+                    if (!isAreaValid) discrepancies.push(`Illegal Region Allocation (Reads ${product.area})`);
+                    if (!isSizeValid) discrepancies.push(`Incorrect Container Size (Reads ${product.size}ml)`);
+                    statusDesc.innerText = discrepancies.join(" | ");
                 }
-
-            } catch (err) {
-                displayPanel.className = "display-panel state-fail";
-                statusTitle.innerText = "SCAN SCAN MISSED";
-                statusDesc.innerText = "Could not decode clear barcode lines. Center the camera directly over the barcode stripes.";
-                barcodeTrackerLog.innerHTML = `Last Decoded Barcode: <span>Decode Failed</span>`;
-                console.error(err);
+            } else {
+                displayPanel.classList.add('state-fail');
+                statusTitle.innerText = "⚠ UNREGISTERED SKU";
+                statusDesc.innerText = `EAN identity matrix [${barcode}] does not exist inside active WMS master databases.`;
             }
         }
     </script>
