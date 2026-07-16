@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WMS Precision Matcher</title>
+    <title>WMS Localized Verifier</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background-color: #121212; color: #fff; min-height: 100vh; }
@@ -57,8 +59,9 @@
         .upload-btn { background: #f39c12; color: #111; font-weight: bold; padding: 14px 28px; border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase; }
         .upload-area input { display: none; }
         
-        #masterTemplateImg { display: none; }
-        #debugCanvas { display: none; margin-top: 10px; border: 1px solid #444; max-width: 100%; }
+        #processingCanvas { display: none; }
+        #hiddenPreview { display: none; max-width: 100%; height: auto; margin-top: 10px; border-radius: 4px; }
+        .debug-box { background: #000; color: #0f0; font-family: monospace; padding: 12px; border-radius: 4px; font-size: 11px; text-align: left; max-height: 150px; overflow-y: auto; display: none; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -67,7 +70,7 @@
         <div class="login-container">
             <div class="wms-header">
                 <h1>SUPPLY CHAIN PLATFORM</h1>
-                <p>High-Precision Verifier</p>
+                <p>Localized Verifier</p>
             </div>
             <div class="input-group"><label>Operator ID</label><input type="text" placeholder="Enter ID"></div>
             <div class="input-group"><label>Password</label><input type="password" placeholder="••••••••"></div>
@@ -77,7 +80,7 @@
 
     <div id="scannerView">
         <header>
-            <h1>GRID PATTERN MATCH ENGINE</h1>
+            <h1>LOCALIZED HYBRID VERIFIER</h1>
         </header>
 
         <div class="config-card">
@@ -87,11 +90,13 @@
                     <label>Target Rate Area</label>
                     <select id="manifestArea">
                         <option value="MEGHALAYA" selected>Meghalaya</option>
+                        <option value="ASSAM">Assam</option>
+                        <option value="WEST BENGAL">West Bengal</option>
                     </select>
                 </div>
                 <div class="select-group">
                     <label>Required Pack Size</label>
-                    <select id="manifestSize" onchange="updateMasterTemplateLink()">
+                    <select id="manifestSize">
                         <option value="180">180 ml</option>
                         <option value="375">375 ml</option>
                         <option value="750" selected>750 ml</option>
@@ -102,33 +107,30 @@
 
         <div class="display-panel" id="displayPanel">
             <div class="status-title" id="statusTitle">READY TO VERIFY</div>
-            <div class="status-desc" id="statusDesc">Select batch layout size and capture a clear, straight photo of the label.</div>
+            <div class="status-desc" id="statusDesc">Snap a clear photograph of the label to run compliance sweeps...</div>
         </div>
 
         <div class="upload-area">
-            <label class="upload-btn" id="uploadLabelBtn">
+            <label class="upload-btn">
                 📷 Capture Label Image
                 <input type="file" id="labelImageInput" accept="image/*" capture="environment">
             </label>
-            <img id="masterTemplateImg" crossOrigin="anonymous" src="">
-            <canvas id="debugCanvas"></canvas>
+            <img id="hiddenPreview" alt="Scan preview">
+            <canvas id="processingCanvas"></canvas>
         </div>
+
+        <div class="debug-box" id="debugBox"></div>
     </div>
 
     <script>
-        // --- MASTER DIRECTORY MAPPING ---
-        const MASTER_IMAGES = {
-            "180": "https://raw.githubusercontent.com/manasghosh9471-ui/Label-Aurthorization/main/master_180.png.jpg",
-            "375": "https://raw.githubusercontent.com/manasghosh9471-ui/Label-Aurthorization/main/master_375.png.jpg",
-            "750": "https://raw.githubusercontent.com/manasghosh9471-ui/Label-Aurthorization/main/master_750.png.jpg"
+        // --- MASTER SKU DICTIONARY ---
+        const BARCODE_MASTER_DATA = {
+            "8901522001099": { size: "375", area: "MEGHALAYA", name: "Royal Stag 375ml" },
+            "8901522002096": { size: "180", area: "MEGHALAYA", name: "Royal Stag 180ml" },
+            "8901522000092": { size: "750", area: "MEGHALAYA", name: "Royal Stag 750ml" }
         };
 
-        function updateMasterTemplateLink() {
-            const size = document.getElementById('manifestSize').value;
-            document.getElementById('masterTemplateImg').src = MASTER_IMAGES[size];
-        }
-
-        // --- BACKGROUND GRAPHICS ---
+        // --- LOGIN GRAPHICS CYCLING ---
         const images = [
             "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80",
             "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=800&q=80"
@@ -144,90 +146,118 @@
         function handleLogin() {
             document.getElementById('loginView').style.display = 'none';
             document.getElementById('scannerView').style.display = 'flex';
-            updateMasterTemplateLink();
         }
 
         const imageInput = document.getElementById('labelImageInput');
         const displayPanel = document.getElementById('displayPanel');
         const statusTitle = document.getElementById('statusTitle');
         const statusDesc = document.getElementById('statusDesc');
+        const debugBox = document.getElementById('debugBox');
+        const hiddenPreview = document.getElementById('hiddenPreview');
+        const procCanvas = document.getElementById('processingCanvas');
 
         imageInput.addEventListener('change', function() {
             if (this.files && this.files[0]) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    const img = new Image();
-                    img.src = e.target.result;
-                    img.onload = function() {
-                        processCanvasMatch(img);
+                    hiddenPreview.src = e.target.result;
+                    hiddenPreview.style.display = "block";
+                    hiddenPreview.onload = function() {
+                        runLocalizedAnalysis();
                     }
                 }
                 reader.readAsDataURL(this.files[0]);
             }
         });
 
-        function processCanvasMatch(capturedImg) {
+        async function runLocalizedAnalysis() {
             displayPanel.className = "display-panel state-processing";
-            statusTitle.innerText = "COMPARING LABELS...";
-            statusDesc.innerText = "Analyzing layout structure and barcode alignment grids...";
+            statusTitle.innerText = "PROCESSING...";
+            statusDesc.innerText = "Analyzing barcode structures and text orientations...";
+            debugBox.style.display = "none";
+            debugBox.innerText = "";
 
-            const masterImg = document.getElementById('masterTemplateImg');
+            const targetArea = document.getElementById('manifestArea').value;
+            const targetSize = document.getElementById('manifestSize').value;
 
-            // Set up processing canvases
-            const canvasCap = document.createElement('canvas');
-            const canvasMst = document.createElement('canvas');
-            const ctxCap = canvasCap.getContext('2d');
-            const ctxMst = canvasMst.getContext('2d');
+            let barcodeMatchValue = null;
+            let combinedTextData = "";
 
-            // Normalize analysis size to prevent resolution differences from breaking the match
-            const normWidth = 150;
-            const normHeight = 300;
-
-            canvasCap.width = canvasMst.width = normWidth;
-            canvasCap.height = canvasMst.height = normHeight;
-
+            // --- STEP 1: DECODE PHYSICAL BARCODE ---
             try {
-                // Draw both images onto normalized canvases
-                ctxCap.drawImage(capturedImg, 0, 0, normWidth, normHeight);
-                ctxMst.drawImage(masterImg, 0, 0, normWidth, normHeight);
-
-                const capData = ctxCap.getImageData(0, 0, normWidth, normHeight).data;
-                const mstData = ctxMst.getImageData(0, 0, normWidth, normHeight).data;
-
-                let mismatchSum = 0;
-                let totalPixels = normWidth * normHeight;
-
-                // Compare brightness distributions across both canvases
-                for (let i = 0; i < capData.length; i += 4) {
-                    // Convert RGB values to grayscale brightness
-                    const capGray = 0.299 * capData[i] + 0.587 * capData[i+1] + 0.114 * capData[i+2];
-                    const mstGray = 0.299 * mstData[i] + 0.587 * mstData[i+1] + 0.114 * mstData[i+2];
-
-                    mismatchSum += Math.abs(capGray - mstGray);
-                }
-
-                // Calculate matching score (100% means identical layout)
-                const maxPossibleDiff = totalPixels * 255;
-                const matchScore = (1 - (mismatchSum / maxPossibleDiff)) * 100;
-
-                displayPanel.className = "display-panel";
-
-                // Optimized threshold: 72% accounts for typical mobile photo angles and lighting
-                if (matchScore >= 72) {
-                    displayPanel.classList.add('state-pass');
-                    statusTitle.innerText = "✓ VERIFIED PASS";
-                    statusDesc.innerText = `Label confirmed (${matchScore.toFixed(1)}% structural alignment). Matches active layout.`;
-                } else {
-                    displayPanel.classList.add('state-fail');
-                    statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
-                    statusDesc.innerText = `The scanned label structural profile does not match the target template (${matchScore.toFixed(1)}% match). Verify SKU size!`;
-                }
-
+                const codeReader = new ZXing.BrowserBarcodeReader();
+                const barcodeResult = await codeReader.decodeFromImageElement(hiddenPreview);
+                barcodeMatchValue = barcodeResult.text.trim();
+                debugBox.innerText += `[BARCODE]: Successfully read barcode -> ${barcodeMatchValue}\n`;
             } catch (err) {
-                console.error(err);
-                displayPanel.className = "display-panel state-fail";
-                statusTitle.innerText = "COMPARISON ERROR";
-                statusDesc.innerText = "Ensure master target size images are active and loaded.";
+                debugBox.innerText += `[BARCODE]: Stripe decoding missed. Checking text fields...\n`;
+            }
+
+            // --- STEP 2: PREPROCESS ROTATED TEXT ---
+            // Draw rotated versions to hidden canvas frames to decode vertical print orientations (90-degree offsets)
+            const ctx = procCanvas.getContext('2d');
+            const orientations = [0, 90, 270];
+
+            for (let angle of orientations) {
+                try {
+                    if (angle === 0) {
+                        const ocrRes = await Tesseract.recognize(hiddenPreview.src, 'eng');
+                        combinedTextData += " " + ocrRes.data.text.toUpperCase();
+                    } else {
+                        // Rotate image 90 or 270 degrees to convert vertical text to horizontal
+                        procCanvas.width = (angle === 90 || angle === 270) ? hiddenPreview.naturalHeight : hiddenPreview.naturalWidth;
+                        procCanvas.height = (angle === 90 || angle === 270) ? hiddenPreview.naturalWidth : hiddenPreview.naturalHeight;
+                        
+                        ctx.clearRect(0,0, procCanvas.width, procCanvas.height);
+                        ctx.translate(procCanvas.width/2, procCanvas.height/2);
+                        ctx.rotate(angle * Math.PI / 180);
+                        ctx.drawImage(hiddenPreview, -hiddenPreview.naturalWidth/2, -hiddenPreview.naturalHeight/2);
+                        
+                        const rotatedDataUrl = procCanvas.toDataURL('image/jpeg');
+                        const ocrRes = await Tesseract.recognize(rotatedDataUrl, 'eng');
+                        combinedTextData += " " + ocrRes.data.text.toUpperCase();
+                    }
+                } catch (ocrErr) {
+                    console.log(`OCR rotation skip for angle: ${angle}`);
+                }
+            }
+
+            debugBox.innerText += `\n[PARSED LABELS LOGS]:\n${combinedTextData}`;
+            debugBox.style.display = "block";
+            displayPanel.className = "display-panel";
+
+            // --- STEP 3: DUAL-CHECK LOGIC ---
+            let passBarcode = false;
+            let passText = false;
+
+            // Match decoded barcode structure to registry
+            if (barcodeMatchValue && BARCODE_MASTER_DATA[barcodeMatchValue]) {
+                const product = BARCODE_MASTER_DATA[barcodeMatchValue];
+                if (product.size === targetSize && product.area === targetArea) {
+                    passBarcode = true;
+                }
+            }
+
+            // Match text patterns across the rotated frames
+            const containsAreaText = combinedTextData.includes(targetArea);
+            const containsSizeText = combinedTextData.includes(targetSize);
+            if (containsAreaText && containsSizeText) {
+                passText = true;
+            }
+
+            // PASS RESOLUTION
+            if (passBarcode || passText) {
+                displayPanel.classList.add('state-pass');
+                statusTitle.innerText = "✓ VERIFIED PASS";
+                statusDesc.innerText = `Matched Target Configurations: ${targetArea} | ${targetSize} ml successfully confirmed.`;
+            } else {
+                displayPanel.classList.add('state-fail');
+                statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
+                
+                let reasons = [];
+                if (!containsAreaText && !passBarcode) reasons.push(`Missing Area String "${targetArea}"`);
+                if (!containsSizeText && !passBarcode) reasons.push(`Missing Size String "${targetSize}"`);
+                statusDesc.innerText = reasons.length > 0 ? reasons.join(" | ") : "Label does not match expected batch parameters.";
             }
         }
     </script>
