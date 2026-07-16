@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WMS Threshold Verification Gateway</title>
+    <title>WMS Robust Verification Gateway</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
@@ -35,8 +35,8 @@
         .upload-btn { background: #f39c12; color: #111; font-weight: bold; padding: 16px 32px; border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase; width: 100%; max-width: 320px; }
         .upload-area input { display: none; }
         
-        #hiddenCaptureImg { display: none; max-width: 100%; max-height: 150px; margin-top: 15px; border-radius: 4px; }
-        .debug-box { background: #000; color: #0f0; font-family: monospace; padding: 10px; border-radius: 4px; font-size: 11px; max-height: 100px; overflow-y: auto; display: block; margin-top: 10px; }
+        #hiddenCaptureImg { display: none; max-width: 100%; max-height: 200px; margin-top: 15px; border-radius: 4px; }
+        .debug-box { background: #000; color: #0f0; font-family: monospace; padding: 10px; border-radius: 4px; font-size: 11px; max-height: 150px; overflow-y: auto; display: block; margin-top: 10px; }
         #thresholdCanvas { display: none; }
     </style>
 </head>
@@ -44,25 +44,25 @@
 
     <div id="scannerView">
         <header>
-            <h1>THRESHOLD PROCESSING PORTAL</h1>
+            <h1>WMS ROBUST SCANNING GATEWAY</h1>
         </header>
 
         <div class="config-card">
             <div class="select-grid">
                 <div class="select-group">
-                    <label>Target Rate Area</label>
+                    <label>Target State Area</label>
                     <select id="manifestArea">
-                        <option value="FOR SALE IN MEGHALAYA ONLY" selected>Meghalaya</option>
-                        <option value="FOR SALE IN ASSAM ONLY">Assam</option>
-                        <option value="FOR SALE IN WEST BENGAL ONLY">West Bengal</option>
+                        <option value="MEGHALAYA" selected>Meghalaya</option>
+                        <option value="ASSAM">Assam</option>
+                        <option value="WEST BENGAL">West Bengal</option>
                     </select>
                 </div>
                 <div class="select-group">
                     <label>Required Pack Size</label>
                     <select id="manifestSize">
                         <option value="180">180 ml</option>
-                        <option value="375">375 ml</option>
-                        <option value="750" selected>750 ml</option>
+                        <option value="375" selected>375 ml</option>
+                        <option value="750">750 ml</option>
                     </select>
                 </div>
             </div>
@@ -70,7 +70,7 @@
 
         <div class="display-panel" id="displayPanel">
             <div class="status-title" id="statusTitle">READY TO VERIFY</div>
-            <div class="status-desc" id="statusDesc">Tap below to take a clear, flat photo of the bottle label details.</div>
+            <div class="status-desc" id="statusDesc">Move closer and take a clear, single-label photo.</div>
         </div>
 
         <div class="upload-area">
@@ -78,7 +78,7 @@
                 📷 Capture Label Image
                 <input type="file" id="labelImageInput" accept="image/*" capture="environment">
             </label>
-            <img id="hiddenCaptureImg" alt="Scan snapshot preview">
+            <center><img id="hiddenCaptureImg" alt="Scan snapshot preview"></center>
             <canvas id="thresholdCanvas"></canvas>
         </div>
 
@@ -87,9 +87,9 @@
 
     <script>
         const BARCODE_MASTER_DATA = {
-            "8901522000092": { size: "750", area: "FOR SALE IN MEGHALAYA ONLY", label: "Royal Stag 750ml" },
-            "8901522001099": { size: "375", area: "FOR SALE IN MEGHALAYA ONLY", label: "Royal Stag 375ml" },
-            "8901522002096": { size: "180", area: "FOR SALE IN MEGHALAYA ONLY", label: "Royal Stag 180ml" }
+            "8901522000092": { size: "750", area: "MEGHALAYA", label: "Royal Stag 750ml" },
+            "8901522001099": { size: "375", area: "MEGHALAYA", label: "Royal Stag 375ml" },
+            "8901522002096": { size: "180", area: "MEGHALAYA", label: "Royal Stag 180ml" }
         };
 
         const imageInput = document.getElementById('labelImageInput');
@@ -107,17 +107,17 @@
                     hiddenCaptureImg.src = e.target.result;
                     hiddenCaptureImg.style.display = "inline-block";
                     hiddenCaptureImg.onload = function() {
-                        executeThresholdScan();
+                        executeRobustScan();
                     };
                 }
                 reader.readAsDataURL(this.files[0]);
             }
         });
 
-        async function executeThresholdScan() {
+        async function executeRobustScan() {
             displayPanel.className = "display-panel state-processing";
-            statusTitle.innerText = "CONTRASTING GRID...";
-            statusDesc.innerText = "Applying dynamic black-and-white threshold filtering layers...";
+            statusTitle.innerText = "PROCESSING LAYERS...";
+            statusDesc.innerText = "Applying dynamic black-and-white threshold filtering...";
 
             const targetArea = document.getElementById('manifestArea').value.toUpperCase();
             const targetSize = document.getElementById('manifestSize').value;
@@ -126,41 +126,44 @@
             let textDetected = "";
 
             try {
-                const ctx = threshCanvas.getContext('2d');
-                threshCanvas.width = hiddenCaptureImg.naturalWidth;
-                threshCanvas.height = hiddenCaptureImg.naturalHeight;
-                ctx.drawImage(hiddenCaptureImg, 0, 0);
-
-                // Apply High-Speed Grayscale & Contrast Threshold Layer Filtering
-                const imgData = ctx.getImageData(0, 0, threshCanvas.width, threshCanvas.height);
-                const data = imgData.data;
-                for (let i = 0; i < data.length; i += 4) {
-                    const brightness = 0.34 * data[i] + 0.5 * data[i+1] + 0.16 * data[i+2];
-                    const binarized = brightness > 125 ? 255 : 0; // Cut off shadows
-                    data[i] = data[i+1] = data[i+2] = binarized;
-                }
-                ctx.putImageData(imgData, 0, 0);
-                const standardProcessedBlob = threshCanvas.toDataURL('image/jpeg', 0.6);
-
-                // --- DETECT BARCODE ---
+                // --- STEP 1: DECODE BARCODE STRIPES ---
                 try {
                     const codeReader = new ZXing.BrowserMultiFormatReader();
                     const barcodeResult = await codeReader.decodeFromImageElement(hiddenCaptureImg);
                     barcodeDetected = barcodeResult.text.trim();
-                } catch (bErr) { }
+                } catch (bErr) {
+                    console.log("Barcode parsing missed on raw frame.");
+                }
 
-                // --- OCR ON ROTATION VIEWS ---
+                // --- STEP 2: RUN DYNAMIC TEXT EXTRACTION GRIDS ---
+                const ctx = threshCanvas.getContext('2d');
                 const angles = [0, 90, 270];
+
                 for (let angle of angles) {
-                    if (angle !== 0) {
+                    if (angle === 0) {
+                        threshCanvas.width = hiddenCaptureImg.naturalWidth;
+                        threshCanvas.height = hiddenCaptureImg.naturalHeight;
+                        ctx.drawImage(hiddenCaptureImg, 0, 0);
+                    } else {
                         threshCanvas.width = hiddenCaptureImg.naturalHeight;
                         threshCanvas.height = hiddenCaptureImg.naturalWidth;
-                        ctx.clearRect(0,0, threshCanvas.width, threshCanvas.height);
-                        ctx.translate(threshCanvas.width/2, threshCanvas.height/2);
+                        ctx.clearRect(0, 0, threshCanvas.width, threshCanvas.height);
+                        ctx.translate(threshCanvas.width / 2, threshCanvas.height / 2);
                         ctx.rotate(angle * Math.PI / 180);
-                        ctx.drawImage(hiddenCaptureImg, -hiddenCaptureImg.naturalWidth/2, -hiddenCaptureImg.naturalHeight/2);
-                        ctx.setTransform(1,0,0,1,0,0);
+                        ctx.drawImage(hiddenCaptureImg, -hiddenCaptureImg.naturalWidth / 2, -hiddenCaptureImg.naturalHeight / 2);
+                        ctx.setTransform(1, 0, 0, 1, 0, 0);
                     }
+
+                    // Apply binarization thresholding to clean up out-of-focus prints
+                    const imgData = ctx.getImageData(0, 0, threshCanvas.width, threshCanvas.height);
+                    const d = imgData.data;
+                    for (let i = 0; i < d.length; i += 4) {
+                        const v = 0.3 * d[i] + 0.59 * d[i+1] + 0.11 * d[i+2];
+                        const thresh = v > 128 ? 255 : 0;
+                        d[i] = d[i+1] = d[i+2] = thresh;
+                    }
+                    ctx.putImageData(imgData, 0, 0);
+
                     const frameUrl = threshCanvas.toDataURL('image/jpeg', 0.5);
                     const ocrResult = await Tesseract.recognize(frameUrl, 'eng');
                     textDetected += " " + ocrResult.data.text.toUpperCase();
@@ -170,28 +173,38 @@
                 debugBox.innerText = `[BARCODE]: ${barcodeDetected || 'Missed'}\n[TEXT]: ${cleanText}`;
                 displayPanel.className = "display-panel";
 
-                let barcodeValid = false;
+                // --- STEP 3: LOGIC ASSURANCE RESOLUTION ---
+                let barcodePass = false;
                 if (barcodeDetected && BARCODE_MASTER_DATA[barcodeDetected]) {
-                    const sku = BARCODE_MASTER_DATA[barcodeDetected];
-                    if (sku.size === targetSize && sku.area === targetArea) barcodeValid = true;
+                    const matchedSku = BARCODE_MASTER_DATA[barcodeDetected];
+                    if (matchedSku.size === targetSize && matchedSku.area === targetArea) {
+                        barcodePass = true;
+                    }
                 }
 
-                const textValid = cleanText.includes(targetArea) && cleanText.includes(targetSize);
+                // Core flexible word-matching checks
+                const textHasArea = cleanText.includes(targetArea);
+                const textHasSize = cleanText.includes(targetSize);
+                let textPass = textHasArea && textHasSize;
 
-                if (barcodeValid || textValid) {
+                if (barcodePass || textPass) {
                     displayPanel.classList.add('state-pass');
                     statusTitle.innerText = "✓ GENUINE PASS";
-                    statusDesc.innerText = `SKU verification target match successful.`;
+                    statusDesc.innerText = `SKU parameters confirmed successfully (${targetArea} | ${targetSize} ml).`;
                 } else {
                     displayPanel.classList.add('state-fail');
-                    statusTitle.innerText = "⚠ COMPLIANCE DISMATCH";
-                    statusDesc.innerText = "Extracted label signatures do not match manifest allocations.";
+                    statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
+                    
+                    let errors = [];
+                    if (!textHasArea) errors.push(`Missing "${targetArea}" text`);
+                    if (!textHasSize) errors.push(`Missing "${targetSize}" footprint`);
+                    statusDesc.innerText = errors.length > 0 ? errors.join(" | ") : "Label validation check failed.";
                 }
 
             } catch (err) {
                 displayPanel.className = "display-panel state-fail";
                 statusTitle.innerText = "PROCESSING ERROR";
-                statusDesc.innerText = "Scan processing loop interrupted. Hold device completely still.";
+                statusDesc.innerText = "Execution failed. Hold the camera flat and try again.";
                 console.error(err);
             }
         }
