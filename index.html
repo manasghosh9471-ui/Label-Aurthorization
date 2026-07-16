@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WMS Enterprise Verification Gateway</title>
+    <title>WMS Threshold Verification Gateway</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background-color: #121212; color: #fff; min-height: 100vh; display: flex; flex-direction: column; }
@@ -17,34 +19,32 @@
         .select-group label { display: block; color: #888; font-size: 11px; margin-bottom: 4px; text-transform: uppercase; }
         .select-group select { width: 100%; padding: 8px; background: #2b2b2b; border: 1px solid #444; color: #fff; border-radius: 4px; font-weight: bold; }
 
-        /* Gate Display Panels */
         .display-panel {
             flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
             background: #1a1a1a; border-radius: 8px; border: 2px dashed #444; padding: 30px; text-align: center;
             margin-bottom: 20px; min-height: 250px; transition: all 0.2s;
         }
-        .status-title { font-size: 32px; font-weight: bold; }
+        .status-title { font-size: 28px; font-weight: bold; }
         .status-desc { font-size: 15px; color: #ccc; max-width: 400px; line-height: 1.4; margin-top: 5px; }
         
-        /* High-Visibility Industrial Output Overrides */
         .state-pass { background: #1b5e20 !important; border-color: #4caf50 !important; }
         .state-fail { background: #b71c1c !important; border-color: #f44336 !important; }
+        .state-processing { background: #2980b9 !important; border-color: #3498db !important; }
 
-        .input-area { background: #1e1e1e; padding: 15px; border-radius: 6px; border: 1px solid #333; }
-        .input-area input {
-            width: 100%; padding: 14px; background: #2b2b2b; border: 1px solid #444;
-            color: #fff; border-radius: 4px; font-size: 16px; text-align: center; font-weight: bold;
-        }
-        .input-area input:focus { border-color: #f39c12; outline: none; }
+        .upload-area { background: #1e1e1e; padding: 20px; border-radius: 6px; text-align: center; border: 1px solid #333; margin-bottom: 15px;}
+        .upload-btn { background: #f39c12; color: #111; font-weight: bold; padding: 16px 32px; border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase; width: 100%; max-width: 320px; }
+        .upload-area input { display: none; }
         
-        .hint-text { font-size: 11px; color: #666; text-align: center; margin-top: 8px; text-transform: uppercase; }
+        #hiddenCaptureImg { display: none; max-width: 100%; max-height: 150px; margin-top: 15px; border-radius: 4px; }
+        .debug-box { background: #000; color: #0f0; font-family: monospace; padding: 10px; border-radius: 4px; font-size: 11px; max-height: 100px; overflow-y: auto; display: block; margin-top: 10px; }
+        #thresholdCanvas { display: none; }
     </style>
 </head>
 <body>
 
     <div id="scannerView">
         <header>
-            <h1>ENTERPRISE WMS GATEWAY</h1>
+            <h1>THRESHOLD PROCESSING PORTAL</h1>
         </header>
 
         <div class="config-card">
@@ -52,9 +52,9 @@
                 <div class="select-group">
                     <label>Target Rate Area</label>
                     <select id="manifestArea">
-                        <option value="MEGHALAYA" selected>Meghalaya</option>
-                        <option value="ASSAM">Assam</option>
-                        <option value="WEST BENGAL">West Bengal</option>
+                        <option value="FOR SALE IN MEGHALAYA ONLY" selected>Meghalaya</option>
+                        <option value="FOR SALE IN ASSAM ONLY">Assam</option>
+                        <option value="FOR SALE IN WEST BENGAL ONLY">West Bengal</option>
                     </select>
                 </div>
                 <div class="select-group">
@@ -69,71 +69,130 @@
         </div>
 
         <div class="display-panel" id="displayPanel">
-            <div class="status-title" id="statusTitle">AWAITING SCANNER SCAN</div>
-            <div class="status-desc" id="statusDesc">Ready for laser input entries. Scan the label's barcode or type the EAN numbers manually below.</div>
+            <div class="status-title" id="statusTitle">READY TO VERIFY</div>
+            <div class="status-desc" id="statusDesc">Tap below to take a clear, flat photo of the bottle label details.</div>
         </div>
 
-        <div class="input-area">
-            <input type="text" id="barcodeStreamInput" placeholder="[ READY FOR ENTERPRISE INPUT ]" autofocus autocomplete="off">
-            <div class="hint-text">System dynamically catches inputs automatically. Keep focused.</div>
+        <div class="upload-area">
+            <label class="upload-btn">
+                📷 Capture Label Image
+                <input type="file" id="labelImageInput" accept="image/*" capture="environment">
+            </label>
+            <img id="hiddenCaptureImg" alt="Scan snapshot preview">
+            <canvas id="thresholdCanvas"></canvas>
         </div>
+
+        <div class="debug-box" id="debugBox">Awaiting capture input token stream...</div>
     </div>
 
     <script>
-        // --- MASTER SYSTEM COMPLIANCE REGISTRY ---
         const BARCODE_MASTER_DATA = {
-            "8901522001099": { size: "375", area: "MEGHALAYA", name: "Royal Stag 375ml" },
-            "8901522002096": { size: "180", area: "MEGHALAYA", name: "Royal Stag 180ml" },
-            "8901522000092": { size: "750", area: "MEGHALAYA", name: "Royal Stag 750ml" }
+            "8901522000092": { size: "750", area: "FOR SALE IN MEGHALAYA ONLY", label: "Royal Stag 750ml" },
+            "8901522001099": { size: "375", area: "FOR SALE IN MEGHALAYA ONLY", label: "Royal Stag 375ml" },
+            "8901522002096": { size: "180", area: "FOR SALE IN MEGHALAYA ONLY", label: "Royal Stag 180ml" }
         };
 
-        const streamInput = document.getElementById('barcodeStreamInput');
+        const imageInput = document.getElementById('labelImageInput');
         const displayPanel = document.getElementById('displayPanel');
         const statusTitle = document.getElementById('statusTitle');
         const statusDesc = document.getElementById('statusDesc');
+        const debugBox = document.getElementById('debugBox');
+        const hiddenCaptureImg = document.getElementById('hiddenCaptureImg');
+        const threshCanvas = document.getElementById('thresholdCanvas');
 
-        // Force browser cursor window focus loop continuously so input is never missed
-        document.addEventListener('click', () => streamInput.focus());
-        window.addEventListener('load', () => streamInput.focus());
-
-        // Dynamic key listener captures fast scanner streams instantly
-        streamInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                processHardwareInput(this.value.trim());
-                this.value = ''; // Instantly wipe entry buffer for next sequential bottle run
+        imageInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    hiddenCaptureImg.src = e.target.result;
+                    hiddenCaptureImg.style.display = "inline-block";
+                    hiddenCaptureImg.onload = function() {
+                        executeThresholdScan();
+                    };
+                }
+                reader.readAsDataURL(this.files[0]);
             }
         });
 
-        function processHardwareInput(barcode) {
-            if (!barcode) return;
+        async function executeThresholdScan() {
+            displayPanel.className = "display-panel state-processing";
+            statusTitle.innerText = "CONTRASTING GRID...";
+            statusDesc.innerText = "Applying dynamic black-and-white threshold filtering layers...";
 
-            const targetArea = document.getElementById('manifestArea').value;
+            const targetArea = document.getElementById('manifestArea').value.toUpperCase();
             const targetSize = document.getElementById('manifestSize').value;
-            const product = BARCODE_MASTER_DATA[barcode];
 
-            displayPanel.className = "display-panel"; // Flush standard states
+            let barcodeDetected = null;
+            let textDetected = "";
 
-            if (product) {
-                const isAreaValid = product.area === targetArea;
-                const isSizeValid = product.size === targetSize;
+            try {
+                const ctx = threshCanvas.getContext('2d');
+                threshCanvas.width = hiddenCaptureImg.naturalWidth;
+                threshCanvas.height = hiddenCaptureImg.naturalHeight;
+                ctx.drawImage(hiddenCaptureImg, 0, 0);
 
-                if (isAreaValid && isSizeValid) {
+                // Apply High-Speed Grayscale & Contrast Threshold Layer Filtering
+                const imgData = ctx.getImageData(0, 0, threshCanvas.width, threshCanvas.height);
+                const data = imgData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const brightness = 0.34 * data[i] + 0.5 * data[i+1] + 0.16 * data[i+2];
+                    const binarized = brightness > 125 ? 255 : 0; // Cut off shadows
+                    data[i] = data[i+1] = data[i+2] = binarized;
+                }
+                ctx.putImageData(imgData, 0, 0);
+                const standardProcessedBlob = threshCanvas.toDataURL('image/jpeg', 0.6);
+
+                // --- DETECT BARCODE ---
+                try {
+                    const codeReader = new ZXing.BrowserMultiFormatReader();
+                    const barcodeResult = await codeReader.decodeFromImageElement(hiddenCaptureImg);
+                    barcodeDetected = barcodeResult.text.trim();
+                } catch (bErr) { }
+
+                // --- OCR ON ROTATION VIEWS ---
+                const angles = [0, 90, 270];
+                for (let angle of angles) {
+                    if (angle !== 0) {
+                        threshCanvas.width = hiddenCaptureImg.naturalHeight;
+                        threshCanvas.height = hiddenCaptureImg.naturalWidth;
+                        ctx.clearRect(0,0, threshCanvas.width, threshCanvas.height);
+                        ctx.translate(threshCanvas.width/2, threshCanvas.height/2);
+                        ctx.rotate(angle * Math.PI / 180);
+                        ctx.drawImage(hiddenCaptureImg, -hiddenCaptureImg.naturalWidth/2, -hiddenCaptureImg.naturalHeight/2);
+                        ctx.setTransform(1,0,0,1,0,0);
+                    }
+                    const frameUrl = threshCanvas.toDataURL('image/jpeg', 0.5);
+                    const ocrResult = await Tesseract.recognize(frameUrl, 'eng');
+                    textDetected += " " + ocrResult.data.text.toUpperCase();
+                }
+
+                const cleanText = textDetected.replace(/\s+/g, ' ');
+                debugBox.innerText = `[BARCODE]: ${barcodeDetected || 'Missed'}\n[TEXT]: ${cleanText}`;
+                displayPanel.className = "display-panel";
+
+                let barcodeValid = false;
+                if (barcodeDetected && BARCODE_MASTER_DATA[barcodeDetected]) {
+                    const sku = BARCODE_MASTER_DATA[barcodeDetected];
+                    if (sku.size === targetSize && sku.area === targetArea) barcodeValid = true;
+                }
+
+                const textValid = cleanText.includes(targetArea) && cleanText.includes(targetSize);
+
+                if (barcodeValid || textValid) {
                     displayPanel.classList.add('state-pass');
-                    statusTitle.innerText = "✓ AUTHENTIC PASS";
-                    statusDesc.innerText = `${product.name} verified correctly for distribution zone [${product.area}].`;
+                    statusTitle.innerText = "✓ GENUINE PASS";
+                    statusDesc.innerText = `SKU verification target match successful.`;
                 } else {
                     displayPanel.classList.add('state-fail');
-                    statusTitle.innerText = "⚠ COMPLIANCE FAILURE";
-                    
-                    let discrepancies = [];
-                    if (!isAreaValid) discrepancies.push(`Illegal Region Allocation (Reads ${product.area})`);
-                    if (!isSizeValid) discrepancies.push(`Incorrect Container Size (Reads ${product.size}ml)`);
-                    statusDesc.innerText = discrepancies.join(" | ");
+                    statusTitle.innerText = "⚠ COMPLIANCE DISMATCH";
+                    statusDesc.innerText = "Extracted label signatures do not match manifest allocations.";
                 }
-            } else {
-                displayPanel.classList.add('state-fail');
-                statusTitle.innerText = "⚠ UNREGISTERED SKU";
-                statusDesc.innerText = `EAN identity matrix [${barcode}] does not exist inside active WMS master databases.`;
+
+            } catch (err) {
+                displayPanel.className = "display-panel state-fail";
+                statusTitle.innerText = "PROCESSING ERROR";
+                statusDesc.innerText = "Scan processing loop interrupted. Hold device completely still.";
+                console.error(err);
             }
         }
     </script>
