@@ -10,30 +10,8 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background-color: #121212; color: #fff; min-height: 100vh; display: flex; flex-direction: column; }
 
-        /* --- STYLING: LOGIN VIEW --- */
-        #loginView {
-            display: flex; justify-content: center; align-items: center; height: 100vh;
-            background-size: cover; background-position: center; position: relative; transition: background 1.5s ease-in-out;
-        }
-        #loginView::before {
-            content: ''; position: absolute; top:0; left:0; right:0; bottom:0;
-            background: linear-gradient(135deg, rgba(20,20,20,0.85) 0%, rgba(40,40,40,0.6) 100%); z-index: 1;
-        }
-        .login-container {
-            position: relative; z-index: 2; background: rgba(30, 30, 30, 0.85); border: 1px solid #444;
-            border-top: 4px solid #f39c12; padding: 40px; border-radius: 8px; width: 90%; max-width: 400px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.5); backdrop-filter: blur(10px);
-        }
-        .wms-header { text-align: center; margin-bottom: 30px; }
-        .wms-header h1 { color: #fff; font-size: 22px; letter-spacing: 1px; }
-        .wms-header p { color: #f39c12; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
-        .input-group { margin-bottom: 20px; }
-        .input-group label { display: block; color: #aaa; margin-bottom: 8px; font-size: 12px; text-transform: uppercase; }
-        .input-group input { width: 100%; padding: 12px; background: #2b2b2b; border: 1px solid #444; color: #fff; border-radius: 4px; }
-        .login-btn { width: 100%; padding: 14px; background: #f39c12; border: none; color: #111; font-weight: bold; font-size: 16px; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
-
-        /* --- STYLING: SCANNER VIEW --- */
-        #scannerView { display: none; padding: 15px; flex-direction: column; flex: 1; }
+        /* --- STYLING: SCANNER VIEW (NOW PRIMARY VIEW) --- */
+        #scannerView { padding: 15px; flex-direction: column; flex: 1; display: flex; }
         header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 15px; }
         header h1 { font-size: 18px; color: #f39c12; }
         
@@ -74,18 +52,6 @@
     </style>
 </head>
 <body>
-
-    <div id="loginView">
-        <div class="login-container">
-            <div class="wms-header">
-                <h1>SUPPLY CHAIN PLATFORM</h1>
-                <p>Live Video Stream Verifier</p>
-            </div>
-            <div class="input-group"><label>Operator ID</label><input type="text" placeholder="Enter ID"></div>
-            <div class="input-group"><label>Password</label><input type="password" placeholder="••••••••"></div>
-            <button class="login-btn" onclick="handleLogin()">Secure Login</button>
-        </div>
-    </div>
 
     <div id="scannerView">
         <header>
@@ -137,24 +103,6 @@
             "8901522000092": { size: "750", area: "MEGHALAYA" }
         };
 
-        // --- LOGIN GRAPHICS BACKGROUND ROTATION ---
-        const images = [
-            "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80",
-            "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=800&q=80"
-        ];
-        let bgIndex = 0;
-        function rotateBg() {
-            const lv = document.getElementById('loginView');
-            if(lv) lv.style.backgroundImage = `url('${images[bgIndex]}')`;
-            bgIndex = (bgIndex + 1) % images.length;
-        }
-        rotateBg(); setInterval(rotateBg, 5000);
-
-        function handleLogin() {
-            document.getElementById('loginView').style.display = 'none';
-            document.getElementById('scannerView').style.display = 'flex';
-        }
-
         // --- LIVE VIDEO ENGINE CORE EXECUTION LOOP ---
         let codeReader = null;
         let isProcessingFrame = false;
@@ -193,7 +141,7 @@
         }
 
         async function captureAndProcessFrame() {
-            if (isProcessingFrame) return; // Prevent loop collisions if engine execution takes longer than expected
+            if (isProcessingFrame) return; // Prevent loop collisions
             isProcessingFrame = true;
 
             shield.className = "live-overlay-shield shield-processing";
@@ -211,7 +159,7 @@
                 barcodeDetected = barcodeResult.text.trim();
                 debugBox.innerText = `[LIVE STREAM]: Read Barcode Stripe -> ${barcodeDetected}\n`;
             } catch (e) {
-                // ZXing throws silent exceptions constantly while looking for valid barcode shapes frame-by-frame
+                // ZXing looks for valid barcode shapes frame-by-frame
             }
 
             // --- ENGINE PART B: DECODE TEXT MATRIX VIA CANVAS INTERCEPT ---
@@ -243,4 +191,22 @@
             shield.className = "live-overlay-shield"; // Clear temporary parsing layout colors
             
             if (barcodeValid || textValid) {
-                shield.classList.add('shield
+                shield.classList.add('shield-pass');
+                statusTitle.innerText = "✓ PASS";
+                statusDesc.innerText = `Verified: ${targetArea} | ${targetSize} ml confirmed live.`;
+            } else {
+                shield.classList.add('shield-fail');
+                statusTitle.innerText = "⚠ MISMATCH";
+                statusDesc.innerText = `Searching target configurations... Keep camera flat.`;
+            }
+
+            isProcessingFrame = false;
+        }
+
+        // Clean up active loop components securely if tab context kills execution processes
+        window.onbeforeunload = function() {
+            if(scanTimer) clearInterval(scanTimer);
+        };
+    </script>
+</body>
+</html>
