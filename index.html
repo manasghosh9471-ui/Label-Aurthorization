@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WMS Visual Fingerprint Portal</title>
+    <title>WMS Precision Feature Portal</title>
     <script async src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript" onload="onOpenCvReady()"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -58,7 +58,6 @@
         .upload-btn { background: #f39c12; color: #111; font-weight: bold; padding: 14px 28px; border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase; }
         .upload-area input { display: none; }
         
-        #hiddenCanvasImg { display: none; }
         #masterTemplateImg { display: none; }
     </style>
 </head>
@@ -68,7 +67,7 @@
         <div class="login-container">
             <div class="wms-header">
                 <h1>SUPPLY CHAIN PLATFORM</h1>
-                <p>Visual Fingerprint Verifier</p>
+                <p>Feature Keypoint Verifier</p>
             </div>
             <div class="input-group"><label>Operator ID</label><input type="text" placeholder="Enter ID"></div>
             <div class="input-group"><label>Password</label><input type="password" placeholder="••••••••"></div>
@@ -78,7 +77,7 @@
 
     <div id="scannerView">
         <header>
-            <h1>VISUAL IMAGE MATCHER (OPENCV)</h1>
+            <h1>KEYPOINT MATCH ENGINE (ORB)</h1>
         </header>
 
         <div class="config-card">
@@ -94,16 +93,16 @@
                     <label>Required Pack Size</label>
                     <select id="manifestSize" onchange="updateMasterTemplateLink()">
                         <option value="180">180 ml</option>
-                        <option value="375" selected>375 ml</option>
-                        <option value="750">750 ml</option>
+                        <option value="375">375 ml</option>
+                        <option value="750" selected>750 ml</option>
                     </select>
                 </div>
             </div>
         </div>
 
         <div class="display-panel" id="displayPanel">
-            <div class="status-title" id="statusTitle">OPENCV INITIALIZING...</div>
-            <div class="status-desc" id="statusDesc">Please wait for the vision engine to boot...</div>
+            <div class="status-title" id="statusTitle">INITIALIZING ENGINE...</div>
+            <div class="status-desc" id="statusDesc">Please wait for visual feature dependencies to download...</div>
         </div>
 
         <div class="upload-area">
@@ -112,12 +111,11 @@
                 <input type="file" id="labelImageInput" accept="image/*" capture="environment">
             </label>
             <img id="masterTemplateImg" crossOrigin="anonymous" src="">
-            <canvas id="hiddenCanvasImg"></canvas>
         </div>
     </div>
 
     <script>
-        // --- CONFIGURATION LINKS FOR YOUR UPLOADED MASTER REFERENCE IMAGES ---
+        // --- USING YOUR ACTIVE CODES FROM THE PREVIOUS DIRECTORY STRUCTURING ---
         const MASTER_IMAGES = {
             "180": "https://raw.githubusercontent.com/manasghosh9471-ui/Label-Aurthorization/main/master_180.png.jpg",
             "375": "https://raw.githubusercontent.com/manasghosh9471-ui/Label-Aurthorization/main/master_375.png.jpg",
@@ -126,7 +124,7 @@
 
         function onOpenCvReady() {
             document.getElementById('statusTitle').innerText = "ENGINE READY";
-            document.getElementById('statusDesc').innerText = "OpenCV loaded. Select batch size and scan.";
+            document.getElementById('statusDesc').innerText = "Vision framework loaded. Select batch layout size and capture.";
             const btn = document.getElementById('uploadLabelBtn');
             btn.style.opacity = "1";
             btn.style.pointerEvents = "auto";
@@ -138,7 +136,7 @@
             document.getElementById('masterTemplateImg').src = MASTER_IMAGES[size];
         }
 
-        // --- BACKGROUND PHOTOGRAPHY ROTATION ENGINE ---
+        // --- BACKGROUND GRAPHICS LOOPS ---
         const images = [
             "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80",
             "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=800&q=80"
@@ -168,49 +166,78 @@
                     const img = new Image();
                     img.src = e.target.result;
                     img.onload = function() {
-                        processVisualSimilarity(img);
+                        processORBFeatureTracking(img);
                     }
                 }
                 reader.readAsDataURL(this.files[0]);
             }
         });
 
-        function processVisualSimilarity(capturedImgElement) {
+        function processORBFeatureTracking(capturedImgElement) {
             displayPanel.className = "display-panel state-processing";
-            statusTitle.innerText = "COMPARING IMAGES...";
-            statusDesc.innerText = "Analyzing layout structure and graphic elements against the blueprint image...";
+            statusTitle.innerText = "MATCHING FEATURES...";
+            statusDesc.innerText = "Extracting critical image details and verifying brand signatures...";
 
             try {
+                // Initialize matrix parameters for OpenCV processing
                 let src = cv.imread(capturedImgElement);
                 let templ = cv.imread(document.getElementById('masterTemplateImg'));
-                let dst = new cv.Mat();
-                let mask = new cv.Mat();
+                
+                let srcGray = new cv.Mat();
+                let templGray = new cv.Mat();
+                cv.cvtColor(src, srcGray, cv.COLOR_RGBA2GRAY);
+                cv.cvtColor(templ, templGray, cv.COLOR_RGBA2GRAY);
 
-                // Compute geometric matching array matrices
-                cv.matchTemplate(src, templ, dst, cv.TM_CCOEFF_NORMED, mask);
-                let result = cv.minMaxLoc(dst, mask);
+                // Initialize ORB engine tracking parameters
+                let orb = new cv.ORB(500); // Track up to 500 unique geometric landmark features
+                let keypointsSrc = new cv.KeyPointVector();
+                let keypointsTempl = new cv.KeyPointVector();
+                let descriptorsSrc = new cv.Mat();
+                let descriptorsTempl = new cv.Mat();
+
+                // Detect landmark features on both the live target photo and master template copy
+                orb.detectAndCompute(srcGray, new cv.Mat(), keypointsSrc, descriptorsSrc);
+                orb.detectAndCompute(templGray, new cv.Mat(), keypointsTempl, descriptorsTempl);
+
+                // Run Brute-Force matching loop across structural identifiers
+                let bf = new cv.BFMatcher(cv.NORM_HAMMING, true);
+                let matches = new cv.DMatchVector();
                 
-                let matchScore = result.maxVal * 100;
+                let strongMatchCount = 0;
                 
-                src.delete(); templ.delete(); dst.delete(); mask.delete();
+                if (!descriptorsSrc.empty() && !descriptorsTempl.empty()) {
+                    bf.match(descriptorsSrc, descriptorsTempl, matches);
+                    
+                    // Filter matching arrays by clean proximity tolerance thresholds
+                    for (let i = 0; i < matches.size(); ++i) {
+                        if (matches.get(i).distance < 45) { // Valid threshold for industrial warehouse settings
+                            strongMatchCount++;
+                        }
+                    }
+                }
+
+                // Memory release sweeps
+                src.delete(); templ.delete(); srcGray.delete(); templGray.delete();
+                descriptorsSrc.delete(); descriptorsTempl.delete();
+                keypointsSrc.delete(); keypointsTempl.delete(); matches.delete(); orb.delete(); bf.delete();
 
                 displayPanel.className = "display-panel";
 
-                // Threshold level optimized to filter mismatched label configurations comfortably
-                if (matchScore >= 65) {
+                // Industrial benchmark parameter: Finding more than 15 unique matched layout signatures confirms the target SKU
+                if (strongMatchCount >= 15) {
                     displayPanel.classList.add('state-pass');
                     statusTitle.innerText = "✓ VERIFIED PASS";
-                    statusDesc.innerText = `Visual Layout Match Confirmed (${matchScore.toFixed(1)}% match). Label verified successfully.`;
+                    statusDesc.innerText = `Matched brand signature array profile cleanly (${strongMatchCount} strong keypoints confirmed).`;
                 } else {
                     displayPanel.classList.add('state-fail');
                     statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
-                    statusDesc.innerText = `Layout does not match the master template image layout (${matchScore.toFixed(1)}% match). Verify SKU size!`;
+                    statusDesc.innerText = `Insufficient layout features match target master template structure (${strongMatchCount} hits found). Confirm label allocation size.`;
                 }
             } catch (err) {
                 console.error(err);
                 displayPanel.className = "display-panel state-fail";
                 statusTitle.innerText = "PROCESSING ERROR";
-                statusDesc.innerText = "Failed to run layout comparison. Ensure target size images are active.";
+                statusDesc.innerText = "Failed to compile image map grids cleanly. Keep photo flat and try again.";
             }
         }
     </script>
