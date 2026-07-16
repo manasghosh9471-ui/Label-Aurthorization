@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WMS Dual-Engine Verification Portal</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <title>WMS Visual Fingerprint Portal</title>
+    <script async src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript" onload="onOpenCvReady()"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background-color: #121212; color: #fff; min-height: 100vh; }
@@ -59,9 +58,9 @@
         .upload-btn { background: #f39c12; color: #111; font-weight: bold; padding: 14px 28px; border-radius: 4px; cursor: pointer; display: inline-block; font-size: 16px; text-transform: uppercase; }
         .upload-area input { display: none; }
         
-        /* Hidden image element used internally to feed data to the barcode engine */
-        #hiddenScanImg { display: none; max-width: 100%; height: auto; margin-top: 10px; border-radius: 4px; }
-        .debug-box { background: #000; color: #0f0; font-family: monospace; padding: 12px; border-radius: 4px; font-size: 11px; text-align: left; max-height: 150px; overflow-y: auto; display: none; margin-top: 10px; }
+        /* Hidden layout canvas blocks utilized by OpenCV processing */
+        #hiddenCanvasImg { display: none; }
+        #masterTemplateImg { display: none; }
     </style>
 </head>
 <body>
@@ -70,7 +69,7 @@
         <div class="login-container">
             <div class="wms-header">
                 <h1>SUPPLY CHAIN PLATFORM</h1>
-                <p>Dual Engine Verifier</p>
+                <p>Visual Fingerprint Verifier</p>
             </div>
             <div class="input-group"><label>Operator ID</label><input type="text" placeholder="Enter ID"></div>
             <div class="input-group"><label>Password</label><input type="password" placeholder="••••••••"></div>
@@ -80,56 +79,68 @@
 
     <div id="scannerView">
         <header>
-            <h1>ALCO-BEV DUAL VERIFICATION ENGINE</h1>
+            <h1>VISUAL IMAGE MATCHER (OPENCV)</h1>
         </header>
 
         <div class="config-card">
-            <h3>Set Target Manifest for Current Batch</h3>
+            <h3>Set Target Manifest Configuration</h3>
             <div class="select-grid">
                 <div class="select-group">
                     <label>Target Rate Area</label>
                     <select id="manifestArea">
                         <option value="MEGHALAYA" selected>Meghalaya</option>
-                        <option value="ASSAM">Assam</option>
-                        <option value="WEST BENGAL">West Bengal</option>
                     </select>
                 </div>
                 <div class="select-group">
                     <label>Required Pack Size</label>
-                    <select id="manifestSize">
+                    <select id="manifestSize" onchange="updateMasterTemplateLink()">
                         <option value="180">180 ml</option>
-                        <option value="375">375 ml</option>
-                        <option value="750" selected>750 ml</option>
+                        <option value="375" selected>375 ml</option>
+                        <option value="750">750 ml</option>
                     </select>
                 </div>
             </div>
         </div>
 
         <div class="display-panel" id="displayPanel">
-            <div class="status-title" id="statusTitle">AWAITING CAPTURE</div>
-            <div class="status-desc" id="statusDesc">Snap a clear photo showing the barcode and text label together...</div>
+            <div class="status-title" id="statusTitle">OPENCV INITIALIZING...</div>
+            <div class="status-desc" id="statusDesc">Please wait for the vision engine to boot...</div>
         </div>
 
         <div class="upload-area">
-            <label class="upload-btn">
+            <label class="upload-btn" id="uploadLabelBtn" style="opacity: 0.5; pointer-events: none;">
                 📷 Capture Label Image
                 <input type="file" id="labelImageInput" accept="image/*" capture="environment">
             </label>
-            <img id="hiddenScanImg" alt="Scanned preview">
+            <img id="masterTemplateImg" crossOrigin="anonymous" src="">
+            <canvas id="hiddenCanvasImg"></canvas>
         </div>
-
-        <div class="debug-box" id="debugBox"></div>
     </div>
 
     <script>
-        // --- MASTER SYSTEM DATA LOOKUP ARRAYS ---
-        const BARCODE_MASTER_DATA = {
-            "8901522001099": { size: "375", area: "MEGHALAYA", name: "Royal Stag 375ml" },
-            "8901522002096": { size: "180", area: "MEGHALAYA", name: "Royal Stag 180ml" },
-            "8901522000092": { size: "750", area: "MEGHALAYA", name: "Royal Stag 750ml" }
+        // --- CONFIGURATION LINKS FOR YOUR MASTER REFERENCE IMAGES ---
+        // REPLACE THESE STRINGS WITH THE ABSOLUTE PATHS TO YOUR TARGET IMAGES
+        const MASTER_IMAGES = {
+            "180": "https://raw.githubusercontent.com/yourusername/yourrepo/main/master_180.png",
+            "375": "https://raw.githubusercontent.com/yourusername/yourrepo/main/master_375.png",
+            "750": "https://raw.githubusercontent.com/yourusername/yourrepo/main/master_750.png"
         };
 
-        // --- BACKGROUND GRAPHICS SWITCHER ---
+        function onOpenCvReady() {
+            document.getElementById('statusTitle').innerText = "ENGINE READY";
+            document.getElementById('statusDesc').innerText = "OpenCV loaded. Select batch size and scan.";
+            const btn = document.getElementById('uploadLabelBtn');
+            btn.style.opacity = "1";
+            btn.style.pointer-events = "auto";
+            updateMasterTemplateLink();
+        }
+
+        function updateMasterTemplateLink() {
+            const size = document.getElementById('manifestSize').value;
+            document.getElementById('masterTemplateImg').src = MASTER_IMAGES[size];
+        }
+
+        // --- BACKGROUND GRAPHICS ---
         const images = [
             "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80",
             "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=800&q=80"
@@ -151,99 +162,60 @@
         const displayPanel = document.getElementById('displayPanel');
         const statusTitle = document.getElementById('statusTitle');
         const statusDesc = document.getElementById('statusDesc');
-        const debugBox = document.getElementById('debugBox');
-        const hiddenImg = document.getElementById('hiddenScanImg');
 
         imageInput.addEventListener('change', function() {
             if (this.files && this.files[0]) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    hiddenImg.src = e.target.result;
-                    hiddenImg.style.display = "block"; // Display thumbnail to help operator verify picture clarity
-                    
-                    // Trigger dual scanning process once the image file finishes loading locally
-                    hiddenImg.onload = function() {
-                        processDualScan();
-                    };
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = function() {
+                        processVisualSimilarity(img);
+                    }
                 }
                 reader.readAsDataURL(this.files[0]);
             }
         });
 
-        async function processDualScan() {
+        function processVisualSimilarity(capturedImgElement) {
             displayPanel.className = "display-panel state-processing";
-            statusTitle.innerText = "RUNNING ANALYSIS...";
-            statusDesc.innerText = "Decoding barcode patterns and checking text regulations simultaneously...";
-            debugBox.style.display = "none";
-            debugBox.innerText = "";
+            statusTitle.innerText = "COMPARING IMAGES...";
+            statusDesc.innerText = "Analyzing graphic elements and pixel arrays against the master blueprint...";
 
-            const targetArea = document.getElementById('manifestArea').value;
-            const targetSize = document.getElementById('manifestSize').value;
-
-            let decodedBarcode = null;
-            let extractedText = "";
-
-            // --- STEP 1: DECODE BARCODE STRIPES ---
             try {
-                const codeReader = new ZXing.BrowserBarcodeReader();
-                const barcodeResult = await codeReader.decodeFromImageElement(hiddenImg);
-                decodedBarcode = barcodeResult.text.trim();
-                debugBox.innerText += `[BARCODE ENGINE]: Successfully read barcode -> ${decodedBarcode}\n`;
-            } catch (err) {
-                debugBox.innerText += `[BARCODE ENGINE]: Stripe decode failed (Label wrinkled or missing barcode element).\n`;
-            }
+                // Read captured photo canvas into OpenCV Matrix structure
+                let src = cv.imread(capturedImgElement);
+                let templ = cv.imread(document.getElementById('masterTemplateImg'));
+                let dst = new cv.Mat();
+                let mask = new cv.Mat();
 
-            // --- STEP 2: PARSE TEXT LABELS (OCR) ---
-            try {
-                const ocrResult = await Tesseract.recognize(hiddenImg.src, 'eng');
-                extractedText = ocrResult.data.text.toUpperCase();
-                debugBox.innerText += `\n[TEXT ENGINE RAW OUTPUT]:\n${ocrResult.data.text}`;
-            } catch (err) {
-                debugBox.innerText += `\n[TEXT ENGINE]: Failed to read print characters.\n`;
-            }
+                // Run structural TM_CCOEFF_NORMED matching matrix algorithm
+                cv.matchTemplate(src, templ, dst, cv.TM_CCOEFF_NORMED, mask);
+                let result = cv.minMaxLoc(dst, mask);
+                
+                // The maxVal variable yields a structural similarity percentage score between 0.0 and 1.0
+                let matchScore = result.maxVal * 100;
+                
+                // Clean up memory instances inside the browser pipeline
+                src.delete(); templ.delete(); dst.delete(); mask.delete();
 
-            debugBox.style.display = "block";
-            displayPanel.className = "display-panel"; // Reset container color states
+                displayPanel.className = "display-panel";
 
-            // --- STEP 3: CROSS-REFERENCE CRITERIA CHECK ---
-            let isBarcodeValid = false;
-            let isTextValid = false;
-            let finalErrorLog = [];
-
-            // Barcode matching logic
-            if (decodedBarcode && BARCODE_MASTER_DATA[decodedBarcode]) {
-                const matchedProduct = BARCODE_MASTER_DATA[decodedBarcode];
-                if (matchedProduct.size === targetSize && matchedProduct.area === targetArea) {
-                    isBarcodeValid = true;
+                // Threshold set to 65% matrix alignment to accommodate typical warehouse floor shadows
+                if (matchScore >= 65) {
+                    displayPanel.classList.add('state-pass');
+                    statusTitle.innerText = "✓ VERIFIED PASS";
+                    statusDesc.innerText = `Visual Layout Match Confirmed (${matchScore.toFixed(1)}% structural match). Label is correct.`;
                 } else {
-                    finalErrorLog.push(`Barcode expects ${matchedProduct.name} for ${matchedProduct.area}`);
+                    displayPanel.classList.add('state-fail');
+                    statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
+                    statusDesc.innerText = `Layout does not align with the master template (${matchScore.toFixed(1)}% match). Check packaging size!`;
                 }
-            } else if (decodedBarcode) {
-                finalErrorLog.push(`Barcode ${decodedBarcode} is not registered in WMS database`);
-            } else {
-                finalErrorLog.push("Barcode could not be optically decoded");
-            }
-
-            // Text text matching logic
-            const hasTextArea = extractedText.includes(targetArea);
-            const hasTextSize = extractedText.includes(targetSize);
-            if (hasTextArea && hasTextSize) {
-                isTextValid = true;
-            } else {
-                if (!hasTextArea) finalErrorLog.push(`Text missing area string "${targetArea}"`);
-                if (!hasTextSize) finalErrorLog.push(`Text missing size footprint "${targetSize}"`);
-            }
-
-            // --- STEP 4: DECISION RESOLUTION ---
-            // Pass if the barcode engine confirms it perfectly, OR if text engine validates it completely.
-            if (isBarcodeValid || (decodedBarcode === null && isTextValid)) {
-                displayPanel.classList.add('state-pass');
-                statusTitle.innerText = "✓ VERIFIED PASS";
-                statusDesc.innerText = `Matched Target Configurations: ${targetArea} | ${targetSize} ml successfully confirmed.`;
-            } else {
-                displayPanel.classList.add('state-fail');
-                statusTitle.innerText = "⚠ COMPLIANCE MISMATCH";
-                statusDesc.innerText = finalErrorLog.join(" | ");
+            } catch (err) {
+                console.error(err);
+                displayPanel.className = "display-panel state-fail";
+                statusTitle.innerText = "PROCESSING ERROR";
+                statusDesc.innerText = "Make sure your master template image URL is valid and uploaded correctly to your server.";
             }
         }
     </script>
